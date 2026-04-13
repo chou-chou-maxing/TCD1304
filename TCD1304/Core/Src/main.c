@@ -212,12 +212,12 @@ int main(void)
   TIM2->PSC = 11;												//12 - 1
   TIM2->ARR = 59999;											//60000 - 1
   TIM2->CCR1 = 24;												//4 us
-  TIM2->CCR2 = 56;
+  TIM2->CCR2 = 41;												//TRIG for TIM4
   TIM2->EGR |= TIM_EGR_UG;										//Timer Update
 
   //Configure ADC Trigger Timer (Data rate = 0.2 Mhz)
   TIM4->ARR = 359;												//360 - 1
-  TIM4->CCR4 = 10;
+  TIM4->CCR4 = 180;
 #endif
 
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC_Raw, CCD_PIXEL_COUNT);

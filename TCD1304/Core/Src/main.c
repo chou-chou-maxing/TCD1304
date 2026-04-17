@@ -88,6 +88,7 @@ static void MX_TIM4_Init(void);
 /* USER CODE BEGIN 0 */
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 	data_ready = 1;
+	HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_1);
 }
 /* USER CODE END 0 */
 
@@ -172,15 +173,15 @@ int main(void)
   TIM1->PSC = 23;												//24 - 1
   TIM1->ARR = 59999;											//60000 - 1
   TIM1->CCR1 = 30;												//10 us
-  TIM1->CCR2 = 2;												//667 ns delay between ICG and SH
+  TIM1->CCR2 = 30;												//Gates TIM4
   TIM1->EGR |= TIM_EGR_UG;
 
   //Configure SH (4 ms period)
   TIM2->PSC = 8;											    //9 - 1
   TIM2->ARR = 31999;											//32000 - 1
   TIM2->CCR1 = 32;												//4 us
-  TIM2->CCR2 = 57;
   TIM2->EGR |= TIM_EGR_UG;										//Timer Update
+  TIM2->CNT = 31999 - 4;
 
   //Configure ADC Trigger Timer (Data rate = 0.2 Mhz)
   TIM4->ARR = 359;												//360 - 1
@@ -240,13 +241,15 @@ int main(void)
 
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);		//ADC
 
-  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);		//SH
-  HAL_TIM_OC_Start(&htim2, TIM_CHANNEL_2);		//TRIG for TIM4
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);		//MCLK
 
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);		//ICG
-  HAL_TIM_OC_Start(&htim1, TIM_CHANNEL_2);		//TRIG for SH
 
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);		//MCLK
+  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);		//SH
+
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);		//GATES TIM4
+
+
 
   /* USER CODE END 2 */
 
@@ -262,7 +265,6 @@ int main(void)
 		  bytesToSend = CCD_PIXEL_COUNT * 2;
 		  dataPtr = (uint8_t*)ADC_Raw;
 
-		  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
 
 		  while(CDC_Transmit_FS(&startByte, 1) == USBD_BUSY);
 
@@ -278,7 +280,6 @@ int main(void)
 
 		  while(CDC_Transmit_FS(&stopByte, 1) == USBD_BUSY);
 
-		  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
 		  data_ready = 0;
 	  }
   }
@@ -368,7 +369,7 @@ static void MX_ADC1_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_4;
   sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_13CYCLES_5;
+  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -419,10 +420,6 @@ static void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
-  if (HAL_TIM_OC_Init(&htim1) != HAL_OK)
-  {
-    Error_Handler();
-  }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_OC2REF;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
@@ -440,9 +437,9 @@ static void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
-  sConfigOC.OCMode = TIM_OCMODE_ACTIVE;
-  sConfigOC.Pulse = 4;
-  if (HAL_TIM_OC_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_LOW;
+  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
   {
     Error_Handler();
   }
@@ -477,7 +474,6 @@ static void MX_TIM2_Init(void)
   /* USER CODE END TIM2_Init 0 */
 
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_SlaveConfigTypeDef sSlaveConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
   TIM_OC_InitTypeDef sConfigOC = {0};
 
@@ -503,16 +499,6 @@ static void MX_TIM2_Init(void)
   {
     Error_Handler();
   }
-  if (HAL_TIM_OC_Init(&htim2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sSlaveConfig.SlaveMode = TIM_SLAVEMODE_TRIGGER;
-  sSlaveConfig.InputTrigger = TIM_TS_ITR0;
-  if (HAL_TIM_SlaveConfigSynchro(&htim2, &sSlaveConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_OC2REF;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
@@ -524,13 +510,6 @@ static void MX_TIM2_Init(void)
   sConfigOC.OCPolarity = TIM_OCPOLARITY_LOW;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sConfigOC.OCMode = TIM_OCMODE_ACTIVE;
-  sConfigOC.Pulse = 550;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-  if (HAL_TIM_OC_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
   {
     Error_Handler();
   }
@@ -639,8 +618,8 @@ static void MX_TIM4_Init(void)
   {
     Error_Handler();
   }
-  sSlaveConfig.SlaveMode = TIM_SLAVEMODE_TRIGGER;
-  sSlaveConfig.InputTrigger = TIM_TS_ITR1;
+  sSlaveConfig.SlaveMode = TIM_SLAVEMODE_GATED;
+  sSlaveConfig.InputTrigger = TIM_TS_ITR0;
   if (HAL_TIM_SlaveConfigSynchro(&htim4, &sSlaveConfig) != HAL_OK)
   {
     Error_Handler();

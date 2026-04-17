@@ -40,9 +40,9 @@
 //#define T_INT_500US
 //#define T_INT_1MS
 //#define T_INT_2MS
-//#define T_INT_4MS
+#define T_INT_4MS
 //#define T_INT_5MS
-#define T_INT_10MS
+//#define T_INT_10MS
 
 
 #define CCD_PIXEL_COUNT	4000
@@ -164,11 +164,27 @@ int main(void)
 
 
 #ifdef T_INT_4MS
-  TIM2->PSC = 5;											    //6 - 1
-  TIM2->ARR = 47999;											//48000 - 1
-  TIM2->CCR1 = 48;												//4 us
-  TIM2->CCR2 = 112;
+  //Configure MCLK (0.8 Mhz)
+  TIM3->ARR = 89;												//90 - 1
+  TIM3->CCR1 = 45;												//50% duty cycle
+
+  //Configure ICG (20 ms period)
+  TIM1->PSC = 23;												//24 - 1
+  TIM1->ARR = 59999;											//60000 - 1
+  TIM1->CCR1 = 30;												//10 us
+  TIM1->CCR2 = 2;												//667 ns delay between ICG and SH
+  TIM1->EGR |= TIM_EGR_UG;
+
+  //Configure SH (4 ms period)
+  TIM2->PSC = 8;											    //9 - 1
+  TIM2->ARR = 31999;											//32000 - 1
+  TIM2->CCR1 = 32;												//4 us
+  TIM2->CCR2 = 57;
   TIM2->EGR |= TIM_EGR_UG;										//Timer Update
+
+  //Configure ADC Trigger Timer (Data rate = 0.2 Mhz)
+  TIM4->ARR = 359;												//360 - 1
+  TIM4->CCR4 = 180;
 #endif
 
 #ifdef T_INT_5MS
@@ -187,12 +203,12 @@ int main(void)
   TIM2->PSC = 5;												//6 - 1
   TIM2->ARR = 59999;											//60000 - 1
   TIM2->CCR1 = 48;												//4 us
-  TIM2->CCR2 = 112;
+  TIM2->CCR2 = 86;
   TIM2->EGR |= TIM_EGR_UG;										//Timer Update
 
   //Configure ADC Trigger Timer (Data rate = 0.2 Mhz)
   TIM4->ARR = 359;												//360 - 1
-  TIM4->CCR4 = 1;
+  TIM4->CCR4 = 180;
 #endif
 
 
@@ -212,7 +228,7 @@ int main(void)
   TIM2->PSC = 11;												//12 - 1
   TIM2->ARR = 59999;											//60000 - 1
   TIM2->CCR1 = 24;												//4 us
-  TIM2->CCR2 = 41;												//TRIG for TIM4
+  TIM2->CCR2 = 43;												//TRIG for TIM4
   TIM2->EGR |= TIM_EGR_UG;										//Timer Update
 
   //Configure ADC Trigger Timer (Data rate = 0.2 Mhz)
@@ -246,7 +262,7 @@ int main(void)
 		  bytesToSend = CCD_PIXEL_COUNT * 2;
 		  dataPtr = (uint8_t*)ADC_Raw;
 
-		  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_1);
+		  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
 
 		  while(CDC_Transmit_FS(&startByte, 1) == USBD_BUSY);
 
@@ -256,10 +272,13 @@ int main(void)
 			  dataPtr += CDC_DATA_FS_MAX_PACKET_SIZE;
 		  }
 
-		  while(CDC_Transmit_FS(dataPtr, bytesToSend) == USBD_BUSY);
+		  if (bytesToSend) {
+			  while(CDC_Transmit_FS(dataPtr, bytesToSend) == USBD_BUSY);
+		  }
+
 		  while(CDC_Transmit_FS(&stopByte, 1) == USBD_BUSY);
 
-		  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_1);
+		  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
 		  data_ready = 0;
 	  }
   }
@@ -349,7 +368,7 @@ static void MX_ADC1_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_4;
   sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+  sConfig.SamplingTime = ADC_SAMPLETIME_13CYCLES_5;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -676,12 +695,23 @@ static void MX_GPIO_Init(void)
   /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : PC13 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PB1 */
   GPIO_InitStruct.Pin = GPIO_PIN_1;

@@ -55,7 +55,7 @@ def main():
             if char == b'S':
                 # 2. Tam olarak 8000 byte oku (Parça parça gelse bile bekler)
                 raw_data = read_full_frame(ser, EXPECTED_BYTES)
-                print(len(raw_data))
+                #print(len(raw_data))
                 if raw_data is None:
                     print("Timeout: Frame eksik geldi.")
                     continue
